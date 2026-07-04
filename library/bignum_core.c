@@ -89,14 +89,19 @@ void mbedtls_mpi_core_bigendian_to_host(mbedtls_mpi_uint *A,
         return;
     }
 
-    /*
-     * Traverse limbs and
-     * - adapt byte-order in each limb
-     * - swap the limbs themselves.
-     * For that, simultaneously traverse the limbs from left to right
-     * and from right to left, as long as the left index is not bigger
-     * than the right index (it's not a problem if limbs is odd and the
-     * indices coincide in the last iteration).
+    /* mbedTLS stores limbs in LITTLE-ENDIAN ORDER internally (limb[0] = least significant)
+     * regardless of host endianness. Network data arrives in BIG-ENDIAN byte order.
+     * We must ALWAYS reverse the limb array order after memcpy.
+     *
+     * On BIG-ENDIAN hosts (like m68k):
+     * - Bytes within each limb are already correct (no byte-swap needed)
+     * - But limb order is wrong (most-significant first after memcpy)
+     * - So we reverse the limb array (mpi_bigendian_to_host is no-op)
+     *
+     * On LITTLE-ENDIAN hosts:
+     * - Bytes within each limb are backwards (need byte-swap via mpi_bigendian_to_host)
+     * - AND limb order is wrong
+     * - So we byte-swap each limb AND reverse the array
      */
     for (cur_limb_left = A, cur_limb_right = A + (A_limbs - 1);
          cur_limb_left <= cur_limb_right;

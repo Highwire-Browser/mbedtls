@@ -30,7 +30,6 @@
 #endif
 
 #include <string.h>
-
 #if defined(MBEDTLS_AESNI_C)
 #include "aesni.h"
 #endif
@@ -304,19 +303,26 @@ static void gcm_mult_smalltable(uint8_t *output, const uint8_t *x, uint64_t H[16
     int i = 0;
     unsigned char lo, hi, rem;
     uint64_t u64z[2];
-    const uint64_t *pu64z = NULL;
     uint8_t *u8z = (uint8_t *) u64z;
+    /* FIX: Temporary buffer for endianness-converted H entries */
+    uint64_t h_temp[2];
+    uint8_t *h_temp_bytes = (uint8_t *) h_temp;
 
     lo = x[15] & 0xf;
     hi = (x[15] >> 4) & 0xf;
 
-    pu64z = H[lo];
+    /* FIX: Convert initial H[lo] load to native endianness */
+    h_temp[0] = MBEDTLS_GET_UINT64_BE(&H[lo][0], 0);
+    h_temp[1] = MBEDTLS_GET_UINT64_BE(&H[lo][1], 0);
 
-    rem = (unsigned char) pu64z[1] & 0xf;
-    u64z[1] = (pu64z[0] << 60) | (pu64z[1] >> 4);
-    u64z[0] = (pu64z[0] >> 4);
+    rem = (unsigned char) h_temp[1] & 0xf;
+    u64z[1] = (h_temp[0] << 60) | (h_temp[1] >> 4);
+    u64z[0] = (h_temp[0] >> 4);
     u64z[0] ^= (uint64_t) last4[rem] << 48;
-    mbedtls_xor_no_simd(u8z, u8z, (uint8_t *) H[hi], 16);
+    /* FIX: Convert H[hi] to native endianness before XOR */
+    h_temp[0] = MBEDTLS_GET_UINT64_BE(&H[hi][0], 0);
+    h_temp[1] = MBEDTLS_GET_UINT64_BE(&H[hi][1], 0);
+    mbedtls_xor_no_simd(u8z, u8z, h_temp_bytes, 16);
 
     for (i = 14; i >= 0; i--) {
         lo = x[i] & 0xf;
@@ -326,13 +332,19 @@ static void gcm_mult_smalltable(uint8_t *output, const uint8_t *x, uint64_t H[16
         u64z[1] = (u64z[0] << 60) | (u64z[1] >> 4);
         u64z[0] = (u64z[0] >> 4);
         u64z[0] ^= (uint64_t) last4[rem] << 48;
-        mbedtls_xor_no_simd(u8z, u8z, (uint8_t *) H[lo], 16);
+        /* FIX: Convert H[lo] to native endianness before XOR */
+        h_temp[0] = MBEDTLS_GET_UINT64_BE(&H[lo][0], 0);
+        h_temp[1] = MBEDTLS_GET_UINT64_BE(&H[lo][1], 0);
+        mbedtls_xor_no_simd(u8z, u8z, h_temp_bytes, 16);
 
         rem = (unsigned char) u64z[1] & 0xf;
         u64z[1] = (u64z[0] << 60) | (u64z[1] >> 4);
         u64z[0] = (u64z[0] >> 4);
         u64z[0] ^= (uint64_t) last4[rem] << 48;
-        mbedtls_xor_no_simd(u8z, u8z, (uint8_t *) H[hi], 16);
+        /* FIX: Convert H[hi] to native endianness before XOR */
+        h_temp[0] = MBEDTLS_GET_UINT64_BE(&H[hi][0], 0);
+        h_temp[1] = MBEDTLS_GET_UINT64_BE(&H[hi][1], 0);
+        mbedtls_xor_no_simd(u8z, u8z, h_temp_bytes, 16);
     }
 
     MBEDTLS_PUT_UINT64_BE(u64z[0], output, 0);

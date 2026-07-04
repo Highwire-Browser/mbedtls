@@ -378,6 +378,11 @@ static inline uint64_t mbedtls_bswap64(uint64_t x)
 #define MBEDTLS_BSWAP64 mbedtls_bswap64
 #endif /* !defined(MBEDTLS_BSWAP64) */
 
+/* FORCE BIG-ENDIAN FOR M68K DEBUGGING */
+#if defined(__m68k__) || defined(__M68K__) || defined(M68K)
+#define MBEDTLS_IS_BIG_ENDIAN 1
+#else
+
 #if !defined(__BYTE_ORDER__)
 
 #if defined(__LITTLE_ENDIAN__)
@@ -399,6 +404,8 @@ static const uint16_t mbedtls_byte_order_detector = { 0x100 };
 #endif
 
 #endif /* !defined(__BYTE_ORDER__) */
+
+#endif /* m68k force big-endian */
 
 /**
  * Get the unsigned 32 bits integer corresponding to four bytes in
