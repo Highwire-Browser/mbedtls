@@ -1,6 +1,6 @@
 # HighWire big-endian fixes for Atari 68k
 
-Branch: `highwire-m68k-bigendian`, based on the upstream `mbedtls-3.6.6` tag.
+Branch: `highwire-m68k-bigendian`, based on the upstream `mbedtls-3.6.7` tag.
 
 These are the changes [HighWire](https://github.com/Highwire-Browser/highwire) needs
 to speak TLS on a big-endian m68k. They are NOT submitted upstream and are not
@@ -9,7 +9,7 @@ offered as a contribution.
 ## The three real bugs
 
 Each breaks a different stage of a TLS 1.3 handshake on any big-endian target
-(m68k, PowerPC, SPARC, s390x, MIPS BE), and all three are present in upstream 3.6.6.
+(m68k, PowerPC, SPARC, s390x, MIPS BE), and all three are present in upstream 3.6.7.
 
 | file | function | symptom |
 |---|---|---|
