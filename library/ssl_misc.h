@@ -2591,6 +2591,30 @@ static inline int mbedtls_ssl_get_pk_type_and_md_alg_from_sig_alg(
 static inline int mbedtls_ssl_tls12_sig_alg_is_supported(
     const uint16_t sig_alg)
 {
+#if defined(MBEDTLS_PKCS1_V21) && defined(MBEDTLS_X509_RSASSA_PSS_SUPPORT)
+    /* rsa_pss_rsae_* are TLS 1.3 code points (high byte 0x08) that do NOT
+     * decompose into a legacy (hash,sig) pair, so the byte-based logic below
+     * rejects them. RFC 8446 sec. 4.2.3 explicitly permits these RSASSA-PSS
+     * schemes in TLS 1.2 ServerKeyExchange / CertificateVerify, and the TLS 1.2
+     * client verifies them via mbedtls_pk_verify_ext(MBEDTLS_PK_RSASSA_PSS,...).
+     * Accept them here so servers (e.g. atari-forum.com) that sign SKE with
+     * rsa_pss_rsae_sha256 handshake. Spec-compliant, not a security downgrade. */
+    switch (sig_alg) {
+#if defined(MBEDTLS_MD_CAN_SHA256)
+        case MBEDTLS_TLS1_3_SIG_RSA_PSS_RSAE_SHA256:
+#endif
+#if defined(MBEDTLS_MD_CAN_SHA384)
+        case MBEDTLS_TLS1_3_SIG_RSA_PSS_RSAE_SHA384:
+#endif
+#if defined(MBEDTLS_MD_CAN_SHA512)
+        case MBEDTLS_TLS1_3_SIG_RSA_PSS_RSAE_SHA512:
+#endif
+            return 1;
+        default:
+            break;
+    }
+#endif /* MBEDTLS_PKCS1_V21 && MBEDTLS_X509_RSASSA_PSS_SUPPORT */
+
     /* High byte is hash */
     unsigned char hash = MBEDTLS_BYTE_1(sig_alg);
     unsigned char sig = MBEDTLS_BYTE_0(sig_alg);
