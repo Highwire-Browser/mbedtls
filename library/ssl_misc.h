@@ -484,6 +484,99 @@ static inline size_t mbedtls_ssl_get_input_buflen(const mbedtls_ssl_context *ctx
 }
 #endif
 
+/** Get `ssl->badmac_seen`. This field is encoded as
+ * mbedtls_ssl_context::badmac_seen_or_in_hsfraglen in DTLS contexts,
+ * and doesn't exist in TLS contexts.
+ *
+ * \param[in] ssl       The SSL context to read.
+ *
+ * \return In DTLS, the value of `badmac_seen`. In TLS, 0 (there can't have
+ *         been a record with a bad MAC in TLS, since those abort the
+ *         connection immediately).
+ */
+static inline unsigned mbedtls_ssl_get_badmac_seen(const mbedtls_ssl_context *ssl)
+{
+#if defined(MBEDTLS_SSL_PROTO_DTLS)
+    if (ssl->conf->transport == MBEDTLS_SSL_TRANSPORT_DATAGRAM) {
+        return ssl->badmac_seen_or_in_hsfraglen;
+    }
+#endif
+    (void) ssl;
+    return 0;
+}
+
+#if defined(MBEDTLS_SSL_PROTO_DTLS)
+/* We shouldn't be trying to set badmac_seen if DTLS support is disabled
+ * at compile time. If this is called from a code block that checks for the
+ * DTLS protocol at run time, it should be guarded by
+ * defined(MBEDTLS_SSL_PROTO_DTLS). */
+/** Set `ssl->badmac_seen`. This field is encoded as
+ * mbedtls_ssl_context::badmac_seen_or_in_hsfraglen in DTLS contexts,
+ * and doesn't exist in TLS contexts.
+ *
+ * \param[in,out] ssl   The SSL context to modify.
+ * \param badmac_seen   The new value of `badmac_seen`.
+ *
+ * \return 0 in DTLS, #MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED in TLS.
+ */
+MBEDTLS_CHECK_RETURN_CRITICAL
+static inline int mbedtls_ssl_set_badmac_seen(mbedtls_ssl_context *ssl,
+                                              unsigned badmac_seen)
+{
+    if ((ssl)->conf->transport != MBEDTLS_SSL_TRANSPORT_DATAGRAM) {
+        MBEDTLS_SSL_DEBUG_RET(1, ("Internal error: trying to set badmac_seen in TLS"),
+                              MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED);
+        return MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    }
+    ssl->badmac_seen_or_in_hsfraglen = badmac_seen;
+    return 0;
+}
+#endif
+
+/** Get `ssl->in_hsfraglen`. This field is encoded as
+ * mbedtls_ssl_context::badmac_seen_or_in_hsfraglen in TLS contexts,
+ * and doesn't exist in DTLS contexts.
+ *
+ * \param[in] ssl       The SSL context to read.
+ *
+ * \return In TLS, the value of `in_hsfraglen`. In DTLS, 0 (handshake
+ *         message defragmentation is handled different in DTLS, and
+ *         does not use this field).
+ */
+static inline unsigned mbedtls_ssl_get_in_hsfraglen(const mbedtls_ssl_context *ssl)
+{
+#if defined(MBEDTLS_SSL_PROTO_DTLS)
+    if (ssl->conf->transport == MBEDTLS_SSL_TRANSPORT_DATAGRAM) {
+        return 0;
+    }
+#endif
+    return ssl->badmac_seen_or_in_hsfraglen;
+}
+
+/** Set `ssl->in_hsfraglen`. This field is encoded as
+ * mbedtls_ssl_context::badmac_seen_or_in_hsfraglen in TLS contexts,
+ * and doesn't exist in DTLS contexts.
+ *
+ * \param[in,out] ssl   The SSL context to modify.
+ * \param in_hsfraglen  The new value of `in_hsfraglen`.
+ *
+ * \return 0 in TLS, #MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED in DTLS.
+ */
+MBEDTLS_CHECK_RETURN_CRITICAL
+static inline int mbedtls_ssl_set_in_hsfraglen(mbedtls_ssl_context *ssl,
+                                               unsigned in_hsfraglen)
+{
+#if defined(MBEDTLS_SSL_PROTO_DTLS)
+    if ((ssl)->conf->transport == MBEDTLS_SSL_TRANSPORT_DATAGRAM) {
+        MBEDTLS_SSL_DEBUG_RET(1, ("Internal error: trying to set in_hsfraglen in DTLS"),
+                              MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED);
+        return MBEDTLS_ERR_ERROR_CORRUPTION_DETECTED;
+    }
+#endif
+    ssl->badmac_seen_or_in_hsfraglen = in_hsfraglen;
+    return 0;
+}
+
 /*
  * TLS extension flags (for extensions with outgoing ServerHello content
  * that need it (e.g. for RENEGOTIATION_INFO the server already knows because
@@ -2591,30 +2684,6 @@ static inline int mbedtls_ssl_get_pk_type_and_md_alg_from_sig_alg(
 static inline int mbedtls_ssl_tls12_sig_alg_is_supported(
     const uint16_t sig_alg)
 {
-#if defined(MBEDTLS_PKCS1_V21) && defined(MBEDTLS_X509_RSASSA_PSS_SUPPORT)
-    /* rsa_pss_rsae_* are TLS 1.3 code points (high byte 0x08) that do NOT
-     * decompose into a legacy (hash,sig) pair, so the byte-based logic below
-     * rejects them. RFC 8446 sec. 4.2.3 explicitly permits these RSASSA-PSS
-     * schemes in TLS 1.2 ServerKeyExchange / CertificateVerify, and the TLS 1.2
-     * client verifies them via mbedtls_pk_verify_ext(MBEDTLS_PK_RSASSA_PSS,...).
-     * Accept them here so servers (e.g. atari-forum.com) that sign SKE with
-     * rsa_pss_rsae_sha256 handshake. Spec-compliant, not a security downgrade. */
-    switch (sig_alg) {
-#if defined(MBEDTLS_MD_CAN_SHA256)
-        case MBEDTLS_TLS1_3_SIG_RSA_PSS_RSAE_SHA256:
-#endif
-#if defined(MBEDTLS_MD_CAN_SHA384)
-        case MBEDTLS_TLS1_3_SIG_RSA_PSS_RSAE_SHA384:
-#endif
-#if defined(MBEDTLS_MD_CAN_SHA512)
-        case MBEDTLS_TLS1_3_SIG_RSA_PSS_RSAE_SHA512:
-#endif
-            return 1;
-        default:
-            break;
-    }
-#endif /* MBEDTLS_PKCS1_V21 && MBEDTLS_X509_RSASSA_PSS_SUPPORT */
-
     /* High byte is hash */
     unsigned char hash = MBEDTLS_BYTE_1(sig_alg);
     unsigned char sig = MBEDTLS_BYTE_0(sig_alg);
